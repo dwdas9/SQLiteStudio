@@ -1,116 +1,107 @@
 # SQLite Workbench
 
-SQLite Workbench is a complete cross-platform desktop utility (Windows, macOS, Linux) for creating, inspecting, querying and maintaining SQLite databases. The application is the single, standalone `sqlite_viewer.py` file. It is designed for restricted corporate computers and uses only the Python standard library.
+SQLite Workbench is a single Python file. Run `python studio.py` and it opens a desktop app for browsing, editing and querying SQLite databases.
 
-There are no downloads, installers, `pip` packages, executable helpers or compiled extensions.
+There are many SQLite tools. What makes this one different is its simplicity: no installer, no admin rights and no extra libraries. That makes it useful on locked-down corporate computers where installing software is not allowed.
 
-You can copy `sqlite_viewer.py` by itself to another permitted Windows folder; no other project file is required to run it.
+## See it in action
+
+### Browse and edit data
+
+Explore tables, views, indexes and triggers, then filter, sort or edit records without writing SQL.
+
+![SQLite Workbench browsing the employees table](docs/images/sqlite-workbench-browse.png)
+
+### Inspect the schema
+
+Review columns, types, constraints, indexes, foreign keys and SQL definitions.
+
+![SQLite Workbench showing the employees table schema](docs/images/sqlite-workbench-schema.png)
+
+### Run SQL
+
+Write queries and inspect their results, history and execution log in the same workspace.
+
+![SQLite Workbench executing an aggregate query and showing its results](docs/images/sqlite-workbench-sql.png)
 
 ## Start
 
-Open PowerShell or Command Prompt in this folder and run:
+Open PowerShell or Command Prompt in this folder:
 
 ```powershell
-python .\sqlite_viewer.py
+python .\studio.py
 ```
 
-Open a database immediately by providing its path:
+Open a database immediately by passing its path:
 
 ```powershell
-python .\sqlite_viewer.py "C:\path\to\database.sqlite"
+python .\studio.py "C:\path\to\database.sqlite"
 ```
 
-## Create a test database
+### Sample database
 
-The included generator creates a small database containing related tables, an index, a view, a trigger, constraints and sample records:
+Create and open a sample database containing related tables, an index, a view, a trigger, constraints and records:
 
 ```powershell
 python .\create_sample_database.py
-python .\sqlite_viewer.py .\sample_company.sqlite
+python .\studio.py .\sample_company.sqlite
 ```
 
 The generator asks before replacing an existing sample database.
 
-Run the automated core tests with:
+## Browse and edit data
 
-```powershell
-python .\selftest.py
-```
+- Browse tables and views from the expandable object tree. Columns and declared types appear beneath each object.
+- View 500 records per page with an exact total row count.
+- Sort by one column from its heading or configure a three-column sort.
+- Filter with a SQL `WHERE` expression or the parameterized column-filter builder.
+- Search every table, profile column values and plot numeric data.
+- Add, edit, duplicate or delete rows. Copy selected rows as CSV, JSON, Markdown or SQL `INSERT` statements.
+- Copy and paste tab-separated cell ranges.
+- Keep changes pending until **Commit**, or discard them with **Rollback**.
 
-## Database browsing and editing
+Direct editing requires a primary key or accessible SQLite `rowid`. Composite keys and `WITHOUT ROWID` tables are supported.
 
-- Tables, views, indexes and triggers appear in the expandable object browser. Selecting a table or view expands it to show its columns and declared types.
-- Selecting a table or view immediately displays its records.
-- Recently opened databases are listed under **File ▸ Open recent**; **Reopen last database at startup** is optional.
-- The browser shows the exact total row count and 500 records per page.
-- Click a column heading for ascending or descending sorting, or use **Sort** for a three-column sort.
-- Enter a trusted SQL expression in **SQL WHERE**, or build parameterized filters with **Add column filter**.
-- Double-click any data row to open a complete, scrollable view of all its fields. Use **Edit cell...** or **Edit row** to change data.
-- Use **Edit cell** for multiline text, NULL values and BLOB hexadecimal editing or file import/export.
-- Add, edit, duplicate or delete rows. Multiple selected rows can be copied or deleted together.
-- **Copy as...** places the selected rows on the clipboard as CSV, JSON, Markdown or SQL `INSERT` statements.
-- Type part of a name in the box above the object browser to filter tables, views, indexes and triggers.
-- **Search all tables** (`Ctrl+F`) finds a value in any column of any table; double-click a hit to open that table filtered to it.
-- **Profile column...** shows row/null/distinct counts, min/max, average and sum for numeric data, and the ten most frequent values, honouring the current filter.
-- Row counts are cached per table and filter and refreshed only when data or schema changes.
-- Copy and paste tab-separated cell ranges with `Ctrl+C` and `Ctrl+V`.
-- Changes remain reversible until **Commit** is selected. **Rollback** discards pending changes.
+## Inspect and change the schema
 
-Direct editing requires a normal table with a primary key (single or composite) or an accessible SQLite `rowid`. Rows are matched on every primary-key column, so composite-key and `WITHOUT ROWID` tables can be edited and deleted directly.
+The **Schema** workspace shows:
 
-## Database structure
-
-The **Structure** workspace shows:
-
-- column positions, names, declared types, defaults, NOT NULL flags and primary-key order;
-- indexes, indexed columns, uniqueness, origin and partial-index state;
-- foreign-key source/target columns and update/delete actions;
+- columns, types, defaults, nullability and primary-key order;
+- indexes, uniqueness, origin and partial-index state;
+- foreign-key columns and update/delete actions;
 - the complete SQL definition for the selected object.
 
-The visual structure tools can create tables, add/rename/drop columns, rename tables, create indexes and drop tables, views, indexes or triggers. The table designer previews its generated SQL and supports primary keys, uniqueness, defaults, NOT NULL, `STRICT` and `WITHOUT ROWID` tables. Use the SQL workspace for composite keys, generated columns or complex migrations.
+Create tables and indexes, add or rename columns, rename tables, and drop schema objects. The table designer previews its SQL and supports `STRICT` and `WITHOUT ROWID` tables. Use the SQL workspace for composite keys, generated columns and complex migrations.
 
-## SQL workspace
+## Run SQL
 
-- Maintain multiple query tabs.
-- Open and save `.sql` files.
-- Run selected SQL or the complete active tab with `F9`. Queries run in the background so the window stays responsive; use **Cancel** to interrupt a long query.
-- Queries may use `:name`, `@name`, `$name` or `?` parameters; the workbench prompts for the values and binds them safely (typed as integer, decimal, text or `<NULL>`).
-- Every run reports its execution time. Results are capped at 5,000 rows and the status bar says when a result was truncated.
-- Inspect up to 5,000 rows from the final result set.
+- Maintain multiple query tabs and open or save `.sql` files.
+- Run selected SQL or the complete active tab. Queries run in the background and can be cancelled.
+- Bind `:name`, `@name`, `$name` and `?` parameters as integers, decimals, text or `NULL`.
+- Inspect up to 5,000 result rows with execution time and truncation status.
 - Generate `EXPLAIN QUERY PLAN` output.
-- Use lightweight SQL syntax highlighting, and **Format** to upper-case keywords and put one clause per line.
-- Press `Ctrl+Space` to insert SQL keywords, schema objects or column names.
-- Double-click an entry in **History** to restore it.
-- Review every statement issued by the connection in **SQL Log**.
+- Format SQL and complete keywords, schema objects and column names.
+- Restore previous statements from **History** and review issued statements in **SQL Log**.
 
 ## Import, export and projects
 
-- Import CSV into a new table. INTEGER and REAL affinities are inferred conservatively from the first 1,000 records.
-- Import a JSON array of objects into a new table; nested objects and arrays are stored as JSON text.
-- Export the selected table as a SQL script of `CREATE TABLE` plus `INSERT` statements.
-- Export the displayed data grid or query results to UTF-8 CSV, JSON or Markdown.
-- Export the complete selected table or filtered/sorted view to CSV, JSON or Markdown using streaming batches.
-- Export a complete database as a standard SQL dump.
-- Execute an existing SQL dump or migration script.
-- Create a consistent SQLite backup using SQLite's online backup API.
-- Save a workspace project as readable JSON, including the database path, read-only state, selected object, filters, sorting and every SQL tab.
+- Import CSV or JSON into a new table. CSV column affinities are inferred from the first 1,000 records.
+- Export displayed results or a complete filtered and sorted table as CSV, JSON or Markdown.
+- Export a table as `CREATE TABLE` plus `INSERT` statements.
+- Export a database as a SQL dump, or execute a dump or migration script.
+- Create a consistent backup with SQLite's online backup API.
+- Save the database path, selected object, filters, sorting and SQL tabs as a readable JSON project.
 
-## Administration and safety
+## Database tools and safety
 
-- Open a database in read-only mode.
-- Writable databases use WAL journal mode and a 5-second busy timeout by default, so other clients do not cause immediate lock errors.
-- Dropping a table first shows how many rows will be lost, and foreign-key failures when deleting or editing name the tables that still reference the row.
-- Files that are not writable open read-only automatically, and very large files prompt before opening.
-- The toolbar shows **Uncommitted changes** while a transaction is pending.
-- Unexpected errors are written to `sqlite_workbench_errors.log` beside the program and shown in a dialog instead of crashing the app.
-- Attach another database and address it from SQL as `alias.table_name`.
-- Review and change common PRAGMAs such as journal mode, synchronization, cache size and busy timeout.
-- Run integrity and foreign-key checks.
-- Run `VACUUM`, `ANALYZE`, `PRAGMA optimize` and `REINDEX`.
-- Inspect the database file size, SQLite version, page information, journal mode and foreign-key state.
-- Toggle a persistent dark/light theme, and change the text size with `Ctrl++`, `Ctrl+-` and `Ctrl+0`.
-- **Commit** warns if another program has modified the database since it was opened or last committed.
-- Plot a numeric column from the displayed data as a bar or line chart using Tkinter Canvas.
+- Open a database read-only; non-writable files switch to read-only automatically.
+- Use WAL journal mode and a five-second busy timeout for writable databases.
+- Attach another database and query it as `alias.table_name`.
+- Review common PRAGMAs and database file information.
+- Run integrity and foreign-key checks, `VACUUM`, `ANALYZE`, `PRAGMA optimize` and `REINDEX`.
+- See the affected row count before dropping a table and the referencing tables when a foreign-key operation fails.
+- Receive a warning if another program changes the database before you commit.
+- Switch between light and dark themes and adjust the text size.
 
 ## Keyboard shortcuts
 
@@ -122,17 +113,17 @@ The visual structure tools can create tables, add/rename/drop columns, rename ta
 | `F5` | Refresh schema |
 | `F9` | Run selected or complete SQL |
 | `Ctrl+Space` | SQL completion chooser |
-| `Ctrl+C` | Copy selected data rows |
-| `Ctrl+V` | Paste cells from the active cell |
+| `Ctrl+C` | Copy selected rows |
+| `Ctrl+V` | Paste cells |
 | `Delete` | Delete selected rows |
-| `Ctrl++` / `Ctrl+-` | Larger / smaller text |
+| `Ctrl++` / `Ctrl+-` | Change text size |
 | `Ctrl+0` | Reset text size |
 | `Ctrl+F` | Search all tables |
 
-## Important notes
+## Notes
 
-- Always make a backup before destructive schema changes or importing an unfamiliar SQL script.
-- SQL entered in the raw `WHERE` box and SQL workspace is executed as written. The column-filter builder uses bound parameters and is the safer option for ordinary searching.
-- SQL-script import runs statement by statement inside a savepoint: if any statement fails, nothing from the script is kept and the failing statement is reported. `BEGIN`/`COMMIT` lines inside the script are ignored; choose **Commit** afterwards.
-- SQLite features depend on the SQLite library bundled with the installed Python version. Errors from unsupported syntax are reported without requiring additional components.
-- SQLCipher databases and external SQLite extensions are intentionally unsupported because they require compiled components that violate the restricted-machine requirement.
+- Back up a database before destructive schema changes or importing an unfamiliar SQL script.
+- SQL entered in the raw `WHERE` box or SQL workspace runs as written. Use the parameterized column-filter builder for ordinary filtering.
+- SQL-script imports run inside a savepoint. If a statement fails, the complete import is rolled back. Choose **Commit** after a successful import.
+- Available SQLite features depend on the library bundled with Python.
+- SQLCipher databases and external SQLite extensions are not supported because they require compiled components.
