@@ -1,4 +1,4 @@
-"""Create a safe sample database for testing SQLite Workbench."""
+"""Create a safe sample database for testing SQLiteStudio."""
 
 from pathlib import Path
 import sqlite3
@@ -67,7 +67,7 @@ def main():
     finally:
         connection.close()
     print(f"Created: {TARGET}")
-    print("Open this file in SQLite Workbench to test tables, views, indexes and triggers.")
+    print("Open this file in SQLiteStudio to test tables, views, indexes and triggers.")
 
 
 if __name__ == "__main__":

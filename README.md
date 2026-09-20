@@ -1,6 +1,6 @@
-# SQLite Workbench
+# SQLiteStudio
 
-SQLite Workbench is a single Python file. Run `python studio.py` and it opens a desktop app for browsing, editing and querying SQLite databases.
+SQLiteStudio is a single Python file. Run `python studio.py` and it opens a desktop app for browsing, editing and querying SQLite databases.
 
 There are many SQLite tools. What makes this one different is its simplicity: no installer, no admin rights and no extra libraries. That makes it useful on locked-down corporate computers where installing software is not allowed.
 
@@ -10,19 +10,19 @@ There are many SQLite tools. What makes this one different is its simplicity: no
 
 Explore tables, views, indexes and triggers, then filter, sort or edit records without writing SQL.
 
-![SQLite Workbench browsing the employees table](docs/images/sqlite-workbench-browse.png)
+![SQLiteStudio browsing the employees table](docs/images/sqlite-studio-browse.png)
 
 ### Inspect the schema
 
 Review columns, types, constraints, indexes, foreign keys and SQL definitions.
 
-![SQLite Workbench showing the employees table schema](docs/images/sqlite-workbench-schema.png)
+![SQLiteStudio showing the employees table schema](docs/images/sqlite-studio-schema.png)
 
 ### Run SQL
 
 Write queries and inspect their results, history and execution log in the same workspace.
 
-![SQLite Workbench executing an aggregate query and showing its results](docs/images/sqlite-workbench-sql.png)
+![SQLiteStudio executing an aggregate query and showing its results](docs/images/sqlite-studio-sql.png)
 
 ## Start
 
@@ -34,7 +34,7 @@ Run:
 python studio.py
 ```
 
-SQLite Workbench will open.
+SQLiteStudio will open.
 
 To open a database immediately, add its path:
 

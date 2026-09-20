@@ -1,4 +1,4 @@
-# SQLite Workbench — Improvement Roadmap
+# SQLiteStudio — Improvement Roadmap
 
 A complete backlog for turning the current single-file viewer into a world-class SQLite
 workbench. Grounded in the present code (`sqlite_viewer.py`, ~2,255 lines, standard library

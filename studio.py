@@ -1,4 +1,4 @@
-"""SQLite Workbench - a dependency-free SQLite desktop utility for Windows.
+"""SQLiteStudio - a dependency-free SQLite desktop utility for Windows.
 
 Requires only the Python standard library (tkinter and sqlite3).
 Architect: Das
@@ -21,7 +21,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_NAME = "SQLite Workbench"
+APP_NAME = "SQLiteStudio"
 PAGE_SIZE = 500
 SQLITE_TYPES = ("INTEGER", "TEXT", "REAL", "NUMERIC", "BLOB", "DATE", "DATETIME", "BOOLEAN")
 CONFIG_PATH = Path(__file__).with_name("sqlite_workbench_settings.json")
@@ -1007,7 +1007,7 @@ class RowDetailsDialog(tk.Toplevel):
         self.grab_set()
 
 
-class SQLiteWorkbench(tk.Tk):
+class SQLiteStudio(tk.Tk):
     def __init__(self, initial_path: str | None = None):
         super().__init__()
         self.title(APP_NAME)
@@ -1139,7 +1139,7 @@ class SQLiteWorkbench(tk.Tk):
     def _create_widgets(self):
         toolbar = ttk.Frame(self, padding=(6, 5))
         toolbar.pack(fill="x")
-        ttk.Label(toolbar, text="SQLite Workbench", font=(UI_FONT, 13, "bold")).pack(side="left", padx=(2, 14))
+        ttk.Label(toolbar, text=APP_NAME, font=(UI_FONT, 13, "bold")).pack(side="left", padx=(2, 14))
         for text, command in (("Open", self.open_database), ("New", self.new_database),
                               ("Refresh", self.refresh_schema), ("Commit", self.commit),
                               ("Rollback", self.rollback)):
@@ -2841,7 +2841,7 @@ class SQLiteWorkbench(tk.Tk):
         if not self.require_connection():
             return
         path = filedialog.asksaveasfilename(title="Save workspace project", defaultextension=".sqlw.json",
-                                            filetypes=[("SQLite Workbench projects", "*.sqlw.json"), ("JSON files", "*.json")])
+                                            filetypes=[("SQLiteStudio projects", "*.sqlw.json"), ("JSON files", "*.json")])
         if not path:
             return
         data = {
@@ -2866,7 +2866,7 @@ class SQLiteWorkbench(tk.Tk):
             messagebox.showerror("Save project failed", str(exc))
 
     def open_project(self):
-        path = filedialog.askopenfilename(title="Open workspace project", filetypes=[("SQLite Workbench projects", "*.sqlw.json"), ("JSON files", "*.json")])
+        path = filedialog.askopenfilename(title="Open workspace project", filetypes=[("SQLiteStudio projects", "*.sqlw.json"), ("JSON files", "*.json")])
         if not path:
             return
         try:
@@ -3030,7 +3030,7 @@ class SQLiteWorkbench(tk.Tk):
 def main():
     initial_path = sys.argv[1] if len(sys.argv) > 1 else None
     try:
-        SQLiteWorkbench(initial_path).mainloop()
+        SQLiteStudio(initial_path).mainloop()
     except Exception:
         messagebox.showerror("Unexpected error", traceback.format_exc())
 
