@@ -26,17 +26,23 @@ Write queries and inspect their results, history and execution log in the same w
 
 ## Start
 
-Open PowerShell or Command Prompt in this folder:
+Open PowerShell, Command Prompt or Terminal in the folder containing `studio.py`.
+
+Run:
 
 ```powershell
-python .\studio.py
+python studio.py
 ```
 
-Open a database immediately by passing its path:
+SQLite Workbench will open.
+
+To open a database immediately, add its path:
 
 ```powershell
-python .\studio.py "C:\path\to\database.sqlite"
+python studio.py "C:\path\to\database.sqlite"
 ```
+
+If your computer uses `python3` instead of `python`, replace `python` with `python3`.
 
 ### Sample database
 
