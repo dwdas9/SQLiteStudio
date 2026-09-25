@@ -69,9 +69,9 @@ If the command is named `python3` on your system, use `python3` instead.
 - Windows 10 or newer.
 - .NET 10 SDK.
 - Visual Studio with .NET 10 support is optional.
-- Network access on the first run so .NET can restore the pinned `Microsoft.Data.Sqlite` package. Later runs can use the local NuGet cache.
+- No NuGet packages and no internet access.
 
-The C# studio is a .NET file-based app. Its target framework, WinForms configuration and SQLite package version are declared at the top of `SQLiteStudio.cs`, so it does not need a `.csproj` file.
+The C# studio is a .NET file-based app. Its target framework and WinForms configuration are declared at the top of `SQLiteStudio.cs`, so it does not need a `.csproj` file. SQLite access goes directly through `winsqlite3.dll`, the SQLite library included with Windows. Keep Windows updated because Windows Update services that system component.
 
 ### Run
 
@@ -90,6 +90,19 @@ dotnet run SQLiteStudio.cs -- "C:\path\to\database.sqlite"
 You can also open `SQLiteStudio.cs` directly in a current Visual Studio version and run it as a file-based app.
 
 Normal `dotnet run` compilation happens in .NET's per-user file-app cache. It does not add an executable, DLL, project file, `bin` directory or `obj` directory to this repository.
+
+The file disables NuGet auditing and tells restore to ignore unreachable package sources. Because it has no package references, `dotnet run SQLiteStudio.cs` does not need to retrieve SQLite or other application dependencies from a remote feed.
+
+### C# offline troubleshooting
+
+If an error still mentions `Microsoft.Data.Sqlite`, the laptop has an older copy of `SQLiteStudio.cs`. In the current file, the directives at the top do not contain any `#:package` line. Replace the old file or pull the latest repository version, then clear the file-app cache once:
+
+```powershell
+dotnet clean file-based-apps
+dotnet run SQLiteStudio.cs
+```
+
+If the error instead names `Microsoft.WindowsDesktop.App.Ref`, the machine does not have a complete .NET 10 Windows Desktop SDK installation. Install or repair the approved .NET 10 SDK or Visual Studio .NET desktop workload through the organization's normal software channel. That framework pack is part of the development environment, not an SQLiteStudio package.
 
 ## Sample database
 
@@ -217,6 +230,7 @@ The C# studio emphasizes predictable Windows behavior:
 - Review pending changes before committing. Rollback only affects work that has not already been committed.
 - The C# studio requires commit or rollback before `VACUUM`; the Python studio exposes its equivalent maintenance checks in the Database menu.
 - SQLite capabilities depend on the runtime used by the selected edition.
+- The C# edition uses the SQLite version supplied and serviced by Windows; keep the office laptop current with approved Windows updates.
 - SQLCipher databases and arbitrary external SQLite extensions are not supported by either edition.
 
 ## Development checks

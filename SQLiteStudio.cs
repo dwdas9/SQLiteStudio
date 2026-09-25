@@ -4,10 +4,12 @@
 #:property EnableWindowsTargeting=true
 #:property PublishAot=false
 #:property TreatWarningsAsErrors=true
-#:package Microsoft.Data.Sqlite@10.0.12
+#:property RestoreIgnoreFailedSources=true
+#:property NuGetAudit=false
 
 // SQLiteStudio C# — the additional .NET 10 file-based Windows edition.
 // The cross-platform Python edition remains available in studio.py.
+// SQLite access uses Windows' built-in winsqlite3.dll: no NuGet restore or internet is required.
 // Open this file in Visual Studio with .NET 10 support, or run: dotnet run SQLiteStudio.cs
 // Pass a database path after -- to open it immediately:
 // dotnet run SQLiteStudio.cs -- "C:\\data\\sample.sqlite"
@@ -15,10 +17,10 @@
 using System.Data;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Data.Sqlite;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -216,7 +218,7 @@ sealed class StudioForm : Form
         var help = new ToolStripMenuItem("&Help");
         help.DropDownItems.Add(MenuItem("Keyboard shortcuts", Keys.None, ShowShortcuts));
         help.DropDownItems.Add(MenuItem("About", Keys.None, () => MessageBox.Show(this,
-            "SQLiteStudio C#\n\nA source-only SQLite workbench built as a .NET 10 file-based app.\nNo project file or packaged executable is required.",
+            "SQLiteStudio C#\n\nA source-only SQLite workbench built as a .NET 10 file-based app.\nUses Windows' built-in SQLite library; no NuGet package, project file or packaged executable is required.",
             "About SQLiteStudio", MessageBoxButtons.OK, MessageBoxIcon.Information)));
 
         _menu.Items.AddRange([file, edit, data, database, view, help]);
@@ -1037,7 +1039,18 @@ sealed class StudioForm : Form
         catch (OperationCanceledException)
         {
             AppendLog($"{DateTime.Now:HH:mm:ss}  Query cancelled after {stopwatch.Elapsed.TotalMilliseconds:N0} ms\n");
-            SetStatus("Query cancelled");
+            if (_transaction is not null && _connection is not null && !_connection.InTransaction)
+            {
+                // SQLite rolls back an explicit transaction when a mutating
+                // statement is interrupted. Keep the UI state in sync.
+                _transaction.MarkCompleted();
+                await _transaction.DisposeAsync();
+                _transaction = null;
+                _hasChanges = false;
+                UpdatePendingState();
+                SetStatus("Query cancelled; the interrupted transaction was rolled back");
+            }
+            else SetStatus("Query cancelled");
         }
         catch (Exception ex)
         {
@@ -1793,4 +1806,653 @@ sealed class ResultDialog : Form
         foreach (var row in rows) grid.Rows.Add(row.Select(v => v ?? DBNull.Value).ToArray());
         Controls.Add(grid);
     }
+}
+
+// Minimal ADO-style adapter over Windows' inbox SQLite library. Keeping this
+// adapter in the source file preserves offline execution on managed PCs where
+// NuGet is unavailable. Only the API surface used by SQLiteStudio is exposed.
+enum SqliteOpenMode { ReadOnly, ReadWrite, ReadWriteCreate }
+enum SqliteCacheMode { Default, Private, Shared }
+
+sealed class SqliteConnectionStringBuilder
+{
+    public string DataSource { get; set; } = "";
+    public SqliteOpenMode Mode { get; set; } = SqliteOpenMode.ReadWriteCreate;
+    public SqliteCacheMode Cache { get; set; }
+    public bool Pooling { get; set; }
+    public int DefaultTimeout { get; set; } = 30;
+
+    public override string ToString()
+    {
+        var path = Convert.ToBase64String(Encoding.UTF8.GetBytes(DataSource));
+        return $"winsqlite3|{(int)Mode}|{(int)Cache}|{DefaultTimeout}|{path}";
+    }
+
+    internal static SqliteConnectionOptions Parse(string value)
+    {
+        var parts = value.Split('|', 5);
+        if (parts.Length != 5 || parts[0] != "winsqlite3")
+            throw new ArgumentException("The SQLite connection string is not valid.", nameof(value));
+        return new SqliteConnectionOptions(
+            Encoding.UTF8.GetString(Convert.FromBase64String(parts[4])),
+            (SqliteOpenMode)int.Parse(parts[1], CultureInfo.InvariantCulture),
+            (SqliteCacheMode)int.Parse(parts[2], CultureInfo.InvariantCulture),
+            int.Parse(parts[3], CultureInfo.InvariantCulture));
+    }
+}
+
+sealed record SqliteConnectionOptions(string DataSource, SqliteOpenMode Mode, SqliteCacheMode Cache, int TimeoutSeconds);
+
+sealed class SqliteException : Exception
+{
+    public int SqliteErrorCode { get; }
+    public int SqliteExtendedErrorCode { get; }
+
+    internal SqliteException(string message, int resultCode) : base(message)
+    {
+        SqliteExtendedErrorCode = resultCode;
+        SqliteErrorCode = resultCode & 0xff;
+    }
+}
+
+sealed class SqliteConnection : IAsyncDisposable
+{
+    readonly SqliteConnectionOptions _options;
+    IntPtr _handle;
+    bool _disposed;
+
+    internal IntPtr Handle => _handle != IntPtr.Zero
+        ? _handle
+        : throw new InvalidOperationException("The SQLite connection is not open.");
+
+    internal int TotalChanges => _handle == IntPtr.Zero ? 0 : NativeSqlite.sqlite3_total_changes(_handle);
+    internal bool InTransaction => _handle != IntPtr.Zero && NativeSqlite.sqlite3_get_autocommit(_handle) == 0;
+
+    public SqliteConnection(string connectionString) => _options = SqliteConnectionStringBuilder.Parse(connectionString);
+
+    public Task OpenAsync()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_handle != IntPtr.Zero) return Task.CompletedTask;
+
+        var flags = _options.Mode switch
+        {
+            SqliteOpenMode.ReadOnly => NativeSqlite.OpenReadOnly,
+            SqliteOpenMode.ReadWrite => NativeSqlite.OpenReadWrite,
+            _ => NativeSqlite.OpenReadWrite | NativeSqlite.OpenCreate
+        };
+        flags |= _options.Cache switch
+        {
+            SqliteCacheMode.Shared => NativeSqlite.OpenSharedCache,
+            SqliteCacheMode.Private => NativeSqlite.OpenPrivateCache,
+            _ => 0
+        };
+
+        var path = NativeSqlite.AllocUtf8(_options.DataSource, out _);
+        try
+        {
+            int result;
+            try
+            {
+                result = NativeSqlite.sqlite3_open_v2(path, out _handle, flags, IntPtr.Zero);
+            }
+            catch (DllNotFoundException ex)
+            {
+                throw new PlatformNotSupportedException(
+                    "Windows' built-in winsqlite3.dll was not found. SQLiteStudio C# requires a supported, fully updated Windows installation.", ex);
+            }
+            if (result != NativeSqlite.Ok)
+            {
+                var message = _handle == IntPtr.Zero ? "SQLite could not open the database." : NativeSqlite.ErrorMessage(_handle);
+                if (_handle != IntPtr.Zero) NativeSqlite.sqlite3_close_v2(_handle);
+                _handle = IntPtr.Zero;
+                throw new SqliteException(message, result);
+            }
+            NativeSqlite.sqlite3_extended_result_codes(_handle, 1);
+            NativeSqlite.sqlite3_busy_timeout(_handle, Math.Max(0, _options.TimeoutSeconds) * 1000);
+            return Task.CompletedTask;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(path);
+        }
+    }
+
+    public SqliteCommand CreateCommand()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _ = Handle;
+        return new SqliteCommand(this);
+    }
+
+    public Task<SqliteTransaction> BeginTransactionAsync()
+    {
+        ExecuteImmediate("BEGIN");
+        return Task.FromResult(new SqliteTransaction(this));
+    }
+
+    internal void ExecuteImmediate(string sql)
+    {
+        using var command = CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQueryCore(CancellationToken.None);
+    }
+
+    internal void Interrupt()
+    {
+        if (_handle != IntPtr.Zero) NativeSqlite.sqlite3_interrupt(_handle);
+    }
+
+    internal SqliteException CreateException(int resultCode) =>
+        new($"{NativeSqlite.ErrorMessage(Handle)} (SQLite error {resultCode})", resultCode);
+
+    public Task CloseAsync()
+    {
+        if (_handle == IntPtr.Zero) return Task.CompletedTask;
+        var handle = _handle;
+        _handle = IntPtr.Zero;
+        var result = NativeSqlite.sqlite3_close_v2(handle);
+        if (result != NativeSqlite.Ok) throw new SqliteException("SQLite could not close the database cleanly.", result);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        await CloseAsync();
+        _disposed = true;
+    }
+}
+
+sealed class SqliteTransaction : IAsyncDisposable
+{
+    readonly SqliteConnection _connection;
+    bool _active = true;
+
+    internal SqliteTransaction(SqliteConnection connection) => _connection = connection;
+    internal bool Active => _active;
+    internal void MarkCompleted() => _active = false;
+
+    public Task CommitAsync()
+    {
+        if (!_active) return Task.CompletedTask;
+        _connection.ExecuteImmediate("COMMIT");
+        _active = false;
+        return Task.CompletedTask;
+    }
+
+    public Task RollbackAsync()
+    {
+        if (!_active) return Task.CompletedTask;
+        _connection.ExecuteImmediate("ROLLBACK");
+        _active = false;
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_active)
+        {
+            try { await RollbackAsync(); }
+            catch { _active = false; }
+        }
+    }
+}
+
+sealed record SqliteParameter(string ParameterName, object? Value);
+
+sealed class SqliteParameterCollection : IEnumerable<SqliteParameter>
+{
+    readonly List<SqliteParameter> _items = [];
+
+    public SqliteParameter AddWithValue(string parameterName, object? value)
+    {
+        var parameter = new SqliteParameter(parameterName, value);
+        _items.Add(parameter);
+        return parameter;
+    }
+
+    internal bool TryGet(string nativeName, out object? value)
+    {
+        var exact = _items.LastOrDefault(item => item.ParameterName == nativeName);
+        if (exact is not null)
+        {
+            value = exact.Value;
+            return true;
+        }
+        var bareName = nativeName.TrimStart(':', '@', '$');
+        var compatible = _items.LastOrDefault(item => item.ParameterName.TrimStart(':', '@', '$') == bareName);
+        if (compatible is not null)
+        {
+            value = compatible.Value;
+            return true;
+        }
+        value = null;
+        return false;
+    }
+
+    public IEnumerator<SqliteParameter> GetEnumerator() => _items.GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+sealed class SqliteCommand : IAsyncDisposable, IDisposable
+{
+    readonly SqliteConnection _connection;
+    bool _disposed;
+
+    public string CommandText { get; set; } = "";
+    public int CommandTimeout { get; set; } = 30;
+    public SqliteTransaction? Transaction { get; set; }
+    public SqliteParameterCollection Parameters { get; } = new();
+
+    internal SqliteCommand(SqliteConnection connection) => _connection = connection;
+
+    public Task<SqliteDataReader> ExecuteReaderAsync(CancellationToken cancellationToken = default)
+    {
+        Validate();
+        return Task.FromResult(new SqliteDataReader(_connection, CommandText, Parameters, cancellationToken));
+    }
+
+    public Task<object?> ExecuteScalarAsync()
+    {
+        Validate();
+        using var reader = new SqliteDataReader(_connection, CommandText, Parameters, CancellationToken.None);
+        do
+        {
+            if (reader.FieldCount > 0 && reader.ReadCore(CancellationToken.None))
+                return Task.FromResult<object?>(reader.GetValue(0));
+        } while (reader.NextResultCore(CancellationToken.None));
+        return Task.FromResult<object?>(null);
+    }
+
+    public Task<int> ExecuteNonQueryAsync()
+    {
+        Validate();
+        return Task.FromResult(ExecuteNonQueryCore(CancellationToken.None));
+    }
+
+    internal int ExecuteNonQueryCore(CancellationToken cancellationToken)
+    {
+        Validate();
+        using var reader = new SqliteDataReader(_connection, CommandText, Parameters, cancellationToken);
+        do
+        {
+            while (reader.ReadCore(cancellationToken)) { }
+        } while (reader.NextResultCore(cancellationToken));
+        // sqlite3_changes excludes auxiliary trigger and foreign-key writes,
+        // matching ADO ExecuteNonQuery semantics and the editor's one-row guard.
+        return NativeSqlite.sqlite3_changes(_connection.Handle);
+    }
+
+    public void Cancel() => _connection.Interrupt();
+
+    void Validate()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (string.IsNullOrWhiteSpace(CommandText)) throw new InvalidOperationException("CommandText is empty.");
+        if (Transaction is not null && !Transaction.Active) throw new InvalidOperationException("The SQLite transaction is no longer active.");
+    }
+
+    public void Dispose() => _disposed = true;
+    public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+}
+
+sealed class SqliteDataReader : IAsyncDisposable, IDisposable
+{
+    readonly SqliteConnection _connection;
+    readonly SqliteParameterCollection _parameters;
+    readonly CancellationToken _commandCancellation;
+    readonly int _startingChanges;
+    string _remainingSql;
+    IntPtr _statement;
+    bool _statementDone;
+    bool _disposed;
+
+    internal SqliteDataReader(
+        SqliteConnection connection,
+        string sql,
+        SqliteParameterCollection parameters,
+        CancellationToken cancellationToken)
+    {
+        _connection = connection;
+        _parameters = parameters;
+        _commandCancellation = cancellationToken;
+        _remainingSql = sql;
+        _startingChanges = connection.TotalChanges;
+        PrepareNextStatement();
+    }
+
+    public int FieldCount => _statement == IntPtr.Zero ? 0 : NativeSqlite.sqlite3_column_count(_statement);
+    public int RecordsAffected => Math.Max(0, _connection.TotalChanges - _startingChanges);
+
+    public Task<bool> ReadAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ReadCore(CombineCancellation(cancellationToken)));
+
+    internal bool ReadCore(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_statement == IntPtr.Zero || _statementDone) return false;
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = NativeSqlite.sqlite3_step(_statement);
+        if (result == NativeSqlite.Row) return true;
+        if (result == NativeSqlite.Done)
+        {
+            _statementDone = true;
+            return false;
+        }
+        if (result == NativeSqlite.Interrupt && cancellationToken.IsCancellationRequested)
+            throw new OperationCanceledException(cancellationToken);
+        throw _connection.CreateException(result);
+    }
+
+    public Task<bool> NextResultAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(NextResultCore(CombineCancellation(cancellationToken)));
+
+    internal bool NextResultCore(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        while (_statement != IntPtr.Zero && !_statementDone)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = NativeSqlite.sqlite3_step(_statement);
+            if (result == NativeSqlite.Row) continue;
+            if (result == NativeSqlite.Done) { _statementDone = true; break; }
+            if (result == NativeSqlite.Interrupt && cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException(cancellationToken);
+            throw _connection.CreateException(result);
+        }
+        FinalizeStatement();
+        return PrepareNextStatement();
+    }
+
+    bool PrepareNextStatement()
+    {
+        while (!string.IsNullOrWhiteSpace(_remainingSql))
+        {
+            var bytes = Encoding.UTF8.GetBytes(_remainingSql);
+            var sqlPointer = Marshal.AllocHGlobal(bytes.Length + 1);
+            try
+            {
+                Marshal.Copy(bytes, 0, sqlPointer, bytes.Length);
+                Marshal.WriteByte(sqlPointer, bytes.Length, 0);
+                var result = NativeSqlite.sqlite3_prepare_v2(
+                    _connection.Handle, sqlPointer, -1, out _statement, out var tail);
+                var consumed = checked((int)(tail.ToInt64() - sqlPointer.ToInt64()));
+                if (consumed < 0 || consumed > bytes.Length) consumed = bytes.Length;
+                _remainingSql = consumed >= bytes.Length
+                    ? ""
+                    : Encoding.UTF8.GetString(bytes, consumed, bytes.Length - consumed);
+                if (result != NativeSqlite.Ok)
+                {
+                    FinalizeStatement();
+                    throw _connection.CreateException(result);
+                }
+                if (_statement == IntPtr.Zero)
+                {
+                    if (consumed == 0) return false;
+                    continue;
+                }
+                try { BindParameters(); }
+                catch
+                {
+                    FinalizeStatement();
+                    throw;
+                }
+                _statementDone = false;
+                return true;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(sqlPointer);
+            }
+        }
+        _statement = IntPtr.Zero;
+        return false;
+    }
+
+    void BindParameters()
+    {
+        var count = NativeSqlite.sqlite3_bind_parameter_count(_statement);
+        for (var index = 1; index <= count; index++)
+        {
+            var namePointer = NativeSqlite.sqlite3_bind_parameter_name(_statement, index);
+            var name = namePointer == IntPtr.Zero ? $"?{index}" : Marshal.PtrToStringUTF8(namePointer) ?? $"?{index}";
+            if (!_parameters.TryGet(name, out var value))
+                throw new InvalidOperationException($"No value was supplied for SQL parameter {name}.");
+            var result = BindValue(index, value);
+            if (result != NativeSqlite.Ok) throw _connection.CreateException(result);
+        }
+    }
+
+    int BindValue(int index, object? value)
+    {
+        if (value is null or DBNull) return NativeSqlite.sqlite3_bind_null(_statement, index);
+        if (value is byte[] blob)
+        {
+            if (blob.Length == 0) return NativeSqlite.sqlite3_bind_zeroblob(_statement, index, 0);
+            var blobPointer = Marshal.AllocHGlobal(blob.Length);
+            try
+            {
+                Marshal.Copy(blob, 0, blobPointer, blob.Length);
+                return NativeSqlite.sqlite3_bind_blob(_statement, index, blobPointer, blob.Length, NativeSqlite.Transient);
+            }
+            finally { Marshal.FreeHGlobal(blobPointer); }
+        }
+        if (value is bool boolean) return NativeSqlite.sqlite3_bind_int64(_statement, index, boolean ? 1 : 0);
+        if (value is sbyte or byte or short or ushort or int or uint or long)
+            return NativeSqlite.sqlite3_bind_int64(_statement, index, Convert.ToInt64(value, CultureInfo.InvariantCulture));
+        if (value is float or double or decimal)
+            return NativeSqlite.sqlite3_bind_double(_statement, index, Convert.ToDouble(value, CultureInfo.InvariantCulture));
+        var text = value switch
+        {
+            DateTime date => date.ToString("O", CultureInfo.InvariantCulture),
+            DateTimeOffset date => date.ToString("O", CultureInfo.InvariantCulture),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? ""
+        };
+        var pointer = NativeSqlite.AllocUtf8(text, out var length);
+        try { return NativeSqlite.sqlite3_bind_text(_statement, index, pointer, length, NativeSqlite.Transient); }
+        finally { Marshal.FreeHGlobal(pointer); }
+    }
+
+    public string GetName(int ordinal)
+    {
+        ValidateOrdinal(ordinal);
+        var pointer = NativeSqlite.sqlite3_column_name(_statement, ordinal);
+        return pointer == IntPtr.Zero ? $"column_{ordinal + 1}" : Marshal.PtrToStringUTF8(pointer) ?? $"column_{ordinal + 1}";
+    }
+
+    public bool IsDBNull(int ordinal)
+    {
+        ValidateOrdinal(ordinal);
+        return NativeSqlite.sqlite3_column_type(_statement, ordinal) == NativeSqlite.Null;
+    }
+
+    public object GetValue(int ordinal)
+    {
+        ValidateOrdinal(ordinal);
+        return NativeSqlite.sqlite3_column_type(_statement, ordinal) switch
+        {
+            NativeSqlite.Integer => NativeSqlite.sqlite3_column_int64(_statement, ordinal),
+            NativeSqlite.Float => NativeSqlite.sqlite3_column_double(_statement, ordinal),
+            NativeSqlite.Text => ReadText(ordinal),
+            NativeSqlite.Blob => ReadBlob(ordinal),
+            _ => DBNull.Value
+        };
+    }
+
+    public string GetString(int ordinal) => Convert.ToString(GetValue(ordinal), CultureInfo.InvariantCulture) ?? "";
+    public long GetInt64(int ordinal) => Convert.ToInt64(GetValue(ordinal), CultureInfo.InvariantCulture);
+
+    string ReadText(int ordinal)
+    {
+        var pointer = NativeSqlite.sqlite3_column_text(_statement, ordinal);
+        var length = NativeSqlite.sqlite3_column_bytes(_statement, ordinal);
+        return NativeSqlite.ReadUtf8(pointer, length);
+    }
+
+    byte[] ReadBlob(int ordinal)
+    {
+        var pointer = NativeSqlite.sqlite3_column_blob(_statement, ordinal);
+        var length = NativeSqlite.sqlite3_column_bytes(_statement, ordinal);
+        if (length == 0) return [];
+        if (pointer == IntPtr.Zero) return [];
+        var bytes = new byte[length];
+        Marshal.Copy(pointer, bytes, 0, length);
+        return bytes;
+    }
+
+    void ValidateOrdinal(int ordinal)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_statement == IntPtr.Zero || ordinal < 0 || ordinal >= FieldCount)
+            throw new IndexOutOfRangeException($"Column ordinal {ordinal} is outside the current result set.");
+    }
+
+    CancellationToken CombineCancellation(CancellationToken supplied) =>
+        supplied.CanBeCanceled ? supplied : _commandCancellation;
+
+    void FinalizeStatement()
+    {
+        if (_statement == IntPtr.Zero) return;
+        NativeSqlite.sqlite3_finalize(_statement);
+        _statement = IntPtr.Zero;
+        _statementDone = true;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        FinalizeStatement();
+        _disposed = true;
+    }
+
+    public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+}
+
+static class NativeSqlite
+{
+    internal const int Ok = 0;
+    internal const int Interrupt = 9;
+    internal const int Row = 100;
+    internal const int Done = 101;
+    internal const int Integer = 1;
+    internal const int Float = 2;
+    internal const int Text = 3;
+    internal const int Blob = 4;
+    internal const int Null = 5;
+    internal const int OpenReadOnly = 0x00000001;
+    internal const int OpenReadWrite = 0x00000002;
+    internal const int OpenCreate = 0x00000004;
+    internal const int OpenPrivateCache = 0x00040000;
+    internal const int OpenSharedCache = 0x00020000;
+    internal static readonly IntPtr Transient = new(-1);
+    const string Library = "winsqlite3.dll";
+
+    internal static IntPtr AllocUtf8(string value, out int length)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        length = bytes.Length;
+        var pointer = Marshal.AllocHGlobal(length + 1);
+        Marshal.Copy(bytes, 0, pointer, length);
+        Marshal.WriteByte(pointer, length, 0);
+        return pointer;
+    }
+
+    internal static string ReadUtf8(IntPtr pointer, int length)
+    {
+        if (pointer == IntPtr.Zero || length <= 0) return "";
+        var bytes = new byte[length];
+        Marshal.Copy(pointer, bytes, 0, length);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
+    internal static string ErrorMessage(IntPtr database)
+    {
+        var pointer = sqlite3_errmsg(database);
+        return pointer == IntPtr.Zero ? "Unknown SQLite error." : Marshal.PtrToStringUTF8(pointer) ?? "Unknown SQLite error.";
+    }
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_open_v2(IntPtr filename, out IntPtr database, int flags, IntPtr vfs);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_close_v2(IntPtr database);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr sqlite3_errmsg(IntPtr database);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_extended_result_codes(IntPtr database, int enabled);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_busy_timeout(IntPtr database, int milliseconds);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void sqlite3_interrupt(IntPtr database);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_total_changes(IntPtr database);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_changes(IntPtr database);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_get_autocommit(IntPtr database);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_prepare_v2(IntPtr database, IntPtr sql, int byteCount, out IntPtr statement, out IntPtr tail);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_step(IntPtr statement);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_finalize(IntPtr statement);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_column_count(IntPtr statement);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr sqlite3_column_name(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_column_type(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern long sqlite3_column_int64(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern double sqlite3_column_double(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr sqlite3_column_text(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr sqlite3_column_blob(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_column_bytes(IntPtr statement, int ordinal);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_parameter_count(IntPtr statement);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr sqlite3_bind_parameter_name(IntPtr statement, int index);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_null(IntPtr statement, int index);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_int64(IntPtr statement, int index, long value);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_double(IntPtr statement, int index, double value);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_text(IntPtr statement, int index, IntPtr value, int byteCount, IntPtr destructor);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_blob(IntPtr statement, int index, IntPtr value, int byteCount, IntPtr destructor);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int sqlite3_bind_zeroblob(IntPtr statement, int index, int byteCount);
 }

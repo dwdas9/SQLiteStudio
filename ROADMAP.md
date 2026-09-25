@@ -3,7 +3,7 @@
 This roadmap tracks two source-only desktop applications in the same repository:
 
 - **Python studio** — `studio.py`, cross-platform, Python standard library only.
-- **C# studio** — `SQLiteStudio.cs`, Windows, .NET 10 file-based WinForms app using the pinned `Microsoft.Data.Sqlite` package.
+- **C# studio** — `SQLiteStudio.cs`, Windows, .NET 10 file-based WinForms app using the system `winsqlite3.dll` with no NuGet packages.
 
 The editions share product goals but have different constraints. The Python studio prioritizes broad features, cross-platform use and zero third-party Python packages. The C# studio prioritizes a native Windows interface, Visual Studio use and stricter core workflows while remaining a single source file with no checked-in executable or project file.
 
