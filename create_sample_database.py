@@ -1,4 +1,4 @@
-"""Create a safe sample database for testing SQLiteStudio."""
+"""Create a safe sample database for the Python and C# SQLiteStudio editions."""
 
 from pathlib import Path
 import sqlite3

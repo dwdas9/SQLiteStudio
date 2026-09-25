@@ -1,4 +1,4 @@
-"""Automated standard-library tests for SQLiteStudio core behavior."""
+"""Automated standard-library tests for SQLiteStudio Python core behavior."""
 
 import os
 from pathlib import Path

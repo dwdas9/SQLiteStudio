@@ -1,6 +1,7 @@
-"""SQLiteStudio - a dependency-free SQLite desktop utility for Windows.
+"""SQLiteStudio Python - the cross-platform, standard-library edition.
 
 Requires only the Python standard library (tkinter and sqlite3).
+The additional Windows/.NET edition lives in SQLiteStudio.cs.
 Architect: Das
 """
 

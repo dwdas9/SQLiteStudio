@@ -1,115 +1,183 @@
 # SQLiteStudio
 
-SQLiteStudio is a single Python file. Run `python studio.py` and it opens a desktop app for browsing, editing and querying SQLite databases.
+SQLiteStudio provides two source-only desktop applications for browsing, editing and querying SQLite databases:
 
-There are many SQLite tools. What makes this one different is its simplicity: no installer, no admin rights and no extra libraries. That makes it useful on locked-down corporate computers where installing software is not allowed.
+| Edition | Source file | Platform | Requirements | Best fit |
+|---|---|---|---|---|
+| Python studio | `studio.py` | Windows, macOS and Linux | Python 3.10+ with Tkinter | The broadest feature set with no third-party Python packages |
+| C# studio | `SQLiteStudio.cs` | Windows | .NET 10 SDK | A more modern native Windows interface and stricter data-editing safeguards |
 
-## See it in action
+Both editions run from source. This repository does not ship or require a prebuilt executable.
 
-### Browse and edit data
+The Python studio remains the full-featured, cross-platform edition. The C# studio is an additional Windows edition focused on the core browse, edit, schema and SQL workflows; it does not replace `studio.py`.
 
-Explore tables, views, indexes and triggers, then filter, sort or edit records without writing SQL.
+## Choose an edition
 
-![SQLiteStudio browsing the employees table](docs/images/sqlite-studio-browse.png)
+Use the Python studio when you need cross-platform support, CSV or JSON import, schema designers, projects, backups, charting, table-wide exports or multiple SQL tabs.
 
-### Inspect the schema
+Use the C# studio when you are on Windows, already have the .NET 10 SDK and prefer a native WinForms interface with high-DPI support, background SQL execution, explicit transaction controls and source-level Visual Studio support.
 
-Review columns, types, constraints, indexes, foreign keys and SQL definitions.
+| Capability | Python studio | C# studio |
+|---|:---:|:---:|
+| Browse tables, views, indexes and triggers | Yes | Yes |
+| Filter, sort and page through data | Yes | Yes |
+| Add, edit, duplicate and delete rows | Yes | Yes |
+| Composite keys and `WITHOUT ROWID` tables | Yes | Yes |
+| Commit and rollback pending changes | Yes | Yes |
+| Schema inspection | Yes | Yes |
+| Visual schema changes | Yes | Use the SQL workspace |
+| Background and cancellable SQL | Yes | Yes |
+| Named and positional parameters | Yes | Yes |
+| Multiple SQL tabs and `.sql` files | Yes | Not yet |
+| CSV and JSON import | Yes | Not yet |
+| CSV and JSON export | Yes | Visible rows |
+| SQL dump, backup and projects | Yes | Not yet |
+| Search, profiling and charts | Yes | Not yet |
+| Light and dark themes | Yes | Yes |
+| Cross-platform GUI | Yes | No, Windows only |
 
-![SQLiteStudio showing the employees table schema](docs/images/sqlite-studio-schema.png)
+See [ROADMAP.md](ROADMAP.md) for planned work and edition-specific status.
 
-### Run SQL
+## Python studio
 
-Write queries and inspect their results, history and execution log in the same workspace.
+### Requirements
 
-![SQLiteStudio executing an aggregate query and showing its results](docs/images/sqlite-studio-sql.png)
+- Python 3.10 or newer.
+- Tkinter, normally included with Python on Windows and macOS. Some Linux distributions package it separately.
+- No third-party Python packages.
 
-## Start
+### Run
 
-Open PowerShell, Command Prompt or Terminal in the folder containing `studio.py`.
-
-Run:
+Open PowerShell, Command Prompt or a terminal in the repository folder, then run:
 
 ```powershell
 python studio.py
 ```
 
-SQLiteStudio will open.
-
-To open a database immediately, add its path:
+To open a database immediately:
 
 ```powershell
 python studio.py "C:\path\to\database.sqlite"
 ```
 
-If your computer uses `python3` instead of `python`, replace `python` with `python3`.
+If the command is named `python3` on your system, use `python3` instead.
 
-### Sample database
+## C# studio
 
-Create and open a sample database containing related tables, an index, a view, a trigger, constraints and records:
+### Requirements
+
+- Windows 10 or newer.
+- .NET 10 SDK.
+- Visual Studio with .NET 10 support is optional.
+- Network access on the first run so .NET can restore the pinned `Microsoft.Data.Sqlite` package. Later runs can use the local NuGet cache.
+
+The C# studio is a .NET file-based app. Its target framework, WinForms configuration and SQLite package version are declared at the top of `SQLiteStudio.cs`, so it does not need a `.csproj` file.
+
+### Run
+
+From PowerShell, Command Prompt or a Visual Studio terminal:
+
+```powershell
+dotnet run SQLiteStudio.cs
+```
+
+To open a database immediately, put application arguments after `--`:
+
+```powershell
+dotnet run SQLiteStudio.cs -- "C:\path\to\database.sqlite"
+```
+
+You can also open `SQLiteStudio.cs` directly in a current Visual Studio version and run it as a file-based app.
+
+Normal `dotnet run` compilation happens in .NET's per-user file-app cache. It does not add an executable, DLL, project file, `bin` directory or `obj` directory to this repository.
+
+## Sample database
+
+The Python generator creates a sample database containing related tables, constraints, an index, a view, a trigger and records:
 
 ```powershell
 python .\create_sample_database.py
+```
+
+The generator asks before replacing an existing `sample_company.sqlite` file. Open the result with either studio:
+
+```powershell
 python .\studio.py .\sample_company.sqlite
 ```
 
-The generator asks before replacing an existing sample database.
+```powershell
+dotnet run .\SQLiteStudio.cs -- .\sample_company.sqlite
+```
 
-## Browse and edit data
+## Screenshots
 
-- Browse tables and views from the expandable object tree. Columns and declared types appear beneath each object.
-- View 500 records per page with an exact total row count.
-- Sort by one column from its heading or configure a three-column sort.
-- Filter with a SQL `WHERE` expression or the parameterized column-filter builder.
-- Search every table, profile column values and plot numeric data.
-- Add, edit, duplicate or delete rows. Copy selected rows as CSV, JSON, Markdown or SQL `INSERT` statements.
-- Copy and paste tab-separated cell ranges.
+The current screenshots show the Python studio. The C# studio uses the same three-workspace layout with a native Windows presentation.
+
+### Browse and edit data
+
+Explore tables, views, indexes and triggers, then filter, sort or edit records without writing SQL.
+
+![Python studio browsing the employees table](docs/images/sqlite-studio-browse.png)
+
+### Inspect the schema
+
+Review columns, types, constraints, indexes, foreign keys and SQL definitions.
+
+![Python studio showing the employees table schema](docs/images/sqlite-studio-schema.png)
+
+### Run SQL
+
+Write queries and inspect their results, history and execution log in the same workspace.
+
+![Python studio executing an aggregate query](docs/images/sqlite-studio-sql.png)
+
+## Shared data-editing behavior
+
+- Browse tables and views from an expandable object tree.
+- Display 500 records per page with an exact filtered row count.
+- Sort from column headings and filter with a SQL `WHERE` expression.
+- Add, edit, duplicate or delete rows with parameterized statements.
 - Keep changes pending until **Commit**, or discard them with **Rollback**.
+- Render SQL `NULL` distinctly from an empty string.
+- Disable unsafe direct editing when a table has neither a primary key nor an accessible SQLite `rowid`.
 
-Direct editing requires a primary key or accessible SQLite `rowid`. Composite keys and `WITHOUT ROWID` tables are supported.
+Both editions fetch displayed data and row keys in the same query and add stable key columns to sort order. This prevents an edit or delete from targeting the wrong record when sorted values are tied. Composite primary keys and `WITHOUT ROWID` tables are supported.
 
-## Inspect and change the schema
+## Python-only workflows
 
-The **Schema** workspace shows:
+The Python studio currently provides these additional workflows:
 
-- columns, types, defaults, nullability and primary-key order;
-- indexes, uniqueness, origin and partial-index state;
-- foreign-key columns and update/delete actions;
-- the complete SQL definition for the selected object.
+- parameterized column-filter and multi-column sort builders;
+- search across tables, column profiling and numeric plots;
+- copy and paste of tab-separated cell ranges;
+- copy as CSV, JSON, Markdown or SQL `INSERT` statements;
+- table and index designers plus common `ALTER TABLE` operations;
+- multiple SQL tabs, SQL file open/save and completion;
+- CSV and JSON import with affinity inference;
+- full-table CSV, JSON, Markdown and SQL export;
+- SQL dumps, migrations, online backup and JSON projects;
+- database attachment, PRAGMA editing and additional maintenance tools;
+- recent files, reopen-last settings and adjustable text size.
 
-Create tables and indexes, add or rename columns, rename tables, and drop schema objects. The table designer previews its SQL and supports `STRICT` and `WITHOUT ROWID` tables. Use the SQL workspace for composite keys, generated columns and complex migrations.
+## C# edition safeguards and behavior
 
-## Run SQL
+The C# studio emphasizes predictable Windows behavior:
 
-- Maintain multiple query tabs and open or save `.sql` files.
-- Run selected SQL or the complete active tab. Queries run in the background and can be cancelled.
-- Bind `:name`, `@name`, `$name` and `?` parameters as integers, decimals, text or `NULL`.
-- Inspect up to 5,000 result rows with execution time and truncation status.
-- Generate `EXPLAIN QUERY PLAN` output.
-- Format SQL and complete keywords, schema objects and column names.
-- Restore previous statements from **History** and review issued statements in **SQL Log**.
-
-## Import, export and projects
-
-- Import CSV or JSON into a new table. CSV column affinities are inferred from the first 1,000 records.
-- Export displayed results or a complete filtered and sorted table as CSV, JSON or Markdown.
-- Export a table as `CREATE TABLE` plus `INSERT` statements.
-- Export a database as a SQL dump, or execute a dump or migration script.
-- Create a consistent backup with SQLite's online backup API.
-- Save the database path, selected object, filters, sorting and SQL tabs as a readable JSON project.
-
-## Database tools and safety
-
-- Open a database read-only; non-writable files switch to read-only automatically.
-- Use WAL journal mode and a five-second busy timeout for writable databases.
-- Attach another database and query it as `alias.table_name`.
-- Review common PRAGMAs and database file information.
-- Run integrity and foreign-key checks, `VACUUM`, `ANALYZE`, `PRAGMA optimize` and `REINDEX`.
-- See the affected row count before dropping a table and the referencing tables when a foreign-key operation fails.
-- Receive a warning if another program changes the database before you commit.
-- Switch between light and dark themes and adjust the text size.
+- uses a native WinForms layout with high-DPI support and light/dark themes;
+- keeps table edits in an explicit transaction until commit or rollback;
+- runs SQL work in the background and exposes cancellation;
+- executes multi-statement batches without breaking trigger bodies at internal semicolons;
+- binds `:name`, `@name`, `$name` and `?` parameters using typed prompts;
+- limits the displayed final result set to 5,000 rows and reports truncation;
+- treats generated columns separately from virtual-table hidden columns;
+- edits BLOB values as hexadecimal data instead of silently converting them to text;
+- falls back to read-only mode when a database cannot be opened safely for writing;
+- enables foreign keys, a five-second busy timeout and WAL mode when supported;
+- provides integrity, foreign-key, optimize and vacuum commands.
 
 ## Keyboard shortcuts
+
+### Shared shortcuts
 
 | Shortcut | Action |
 |---|---|
@@ -118,18 +186,47 @@ Create tables and indexes, add or rename columns, rename tables, and drop schema
 | `Ctrl+S` | Commit changes |
 | `F5` | Refresh schema |
 | `F9` | Run selected or complete SQL |
-| `Ctrl+Space` | SQL completion chooser |
 | `Ctrl+C` | Copy selected rows |
-| `Ctrl+V` | Paste cells |
 | `Delete` | Delete selected rows |
+
+### Python studio shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Space` | SQL completion chooser |
+| `Ctrl+V` | Paste cells |
 | `Ctrl++` / `Ctrl+-` | Change text size |
 | `Ctrl+0` | Reset text size |
 | `Ctrl+F` | Search all tables |
 
-## Notes
+### C# studio shortcuts
 
-- Back up a database before destructive schema changes or importing an unfamiliar SQL script.
-- SQL entered in the raw `WHERE` box or SQL workspace runs as written. Use the parameterized column-filter builder for ordinary filtering.
-- SQL-script imports run inside a savepoint. If a statement fails, the complete import is rolled back. Choose **Commit** after a successful import.
-- Available SQLite features depend on the library bundled with Python.
-- SQLCipher databases and external SQLite extensions are not supported because they require compiled components.
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+S` | Roll back changes |
+| `Ctrl+L` | Open the SQL workspace |
+| `Ctrl+E` | Edit the selected row |
+| `Ctrl+Insert` | Add a row |
+| `Ctrl+D` | Duplicate the selected row |
+| `Ctrl+T` | Toggle the light/dark theme |
+
+## Safety notes
+
+- Back up important databases before destructive schema changes or unfamiliar SQL scripts.
+- SQL in the raw `WHERE` box and SQL workspace runs as written. These tools are intended for trusted local databases and trusted SQL.
+- Review pending changes before committing. Rollback only affects work that has not already been committed.
+- The C# studio requires commit or rollback before `VACUUM`; the Python studio exposes its equivalent maintenance checks in the Database menu.
+- SQLite capabilities depend on the runtime used by the selected edition.
+- SQLCipher databases and arbitrary external SQLite extensions are not supported by either edition.
+
+## Development checks
+
+Build the C# file-based app without creating project artifacts in the repository:
+
+```powershell
+dotnet build SQLiteStudio.cs
+```
+
+The Python `selftest.py` entry point still references a legacy module name and is tracked as maintenance work in the roadmap. Do not treat it as a passing release check until that import is aligned with `studio.py`.
+
+Keep edition-specific claims in this README and the roadmap synchronized whenever features are added or behavior changes.
