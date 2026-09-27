@@ -20,11 +20,11 @@ The editions share product goals but have different constraints. The Python stud
 | SQL execution, history and cancellation | Implemented | Implemented |
 | Schema inspection | Implemented | Implemented |
 | Visual schema editing | Implemented | Planned; use SQL today |
-| Import and full-table export | Implemented | Planned |
-| Projects, backup and SQL dumps | Implemented | Planned |
+| Import and full-table export | Implemented | New-table CSV/JSON import and full filtered CSV/JSON/SQL export implemented |
+| Projects, backup and SQL dumps | Implemented | Verified backup and data INSERT export implemented; projects/schema dumps planned |
 | Search, profiling and charts | Implemented | Planned |
 | Cross-platform support | Windows, macOS, Linux | Windows only by design |
-| Automated verification | Python core tests need continued maintenance | Clean .NET build and provider smoke coverage; automated tests planned |
+| Automated verification | Python core tests need continued maintenance | Build and automated Windows paging/provider/cancellation checks; broader UI coverage planned |
 
 The numbered backlog below originated from the Python studio and still uses Python/Tk terminology where appropriate. Items that also apply to the C# edition say so explicitly. A dedicated C# parity section follows the shared backlog.
 
@@ -44,14 +44,14 @@ The numbered backlog below originated from the Python studio and still uses Pyth
 
 | # | Item | Effort | Why |
 |---|---|---:|---|
-| 2.1 | **Done in both editions — SQL work runs away from the UI thread.** | L | Keeps the window responsive. |
+| 2.1 | **Background database operations in both editions.** C# includes schema inspection, editing, maintenance and data transfer. | L | Keeps the window responsive. |
 | 2.2 | **Done in both editions — cancellable SQL.** | M | Required for long-running queries. |
 | 2.3 | **Done in both editions — query timing and SQL log status.** | S | Makes query cost visible. |
 | 2.4 | **Done in both editions — five-second busy timeout.** | S | Handles concurrent access more gracefully. |
 | 2.5 | **Done in both editions — WAL requested for writable databases when supported.** | S | Improves ordinary concurrency. |
-| 2.6 | **Shared — streaming or virtual grid.** Render only visible rows for very wide or tall results. | L | Current GUI grids degrade on large result sets. |
+| 2.6 | **Done in C# — virtual browse/result grids with bounded row buffers.** Python virtualization remains planned. | L | Avoids allocating cell values for every displayed row. |
 | 2.7 | **Shared — optional keyset pagination** instead of high `LIMIT/OFFSET` pages. | M | Scales to millions of rows. |
-| 2.8 | **Done in Python; planned in C# — row-count cache** invalidated by data and schema changes. | M | Avoids repeated expensive counts. |
+| 2.8 | **Done in Python — row-count cache. C# avoids automatic counts and offers a cancellable explicit count.** | M | Avoids repeated expensive counts. |
 
 ## 3. SQL workspace power features P1
 
@@ -175,7 +175,7 @@ The numbered backlog below originated from the Python studio and still uses Pyth
 | 13.3 | **Shared — golden-file tests** for dumps and exports. | M | Stabilizes interchange formats. |
 | 13.4 | **Shared — CI matrix.** Run Python on Windows, macOS and Linux; build and test C# on Windows with .NET 10. | M | Makes release status trustworthy. |
 | 13.5 | **Shared — fuzz SQL parsing, parameter detection and CSV inference.** | M | Finds unusual input failures. |
-| 13.6 | **C# — extract testable core helpers or add a self-test mode** while keeping the shipped application in one source file. | M | Adds regression coverage without a permanent project. |
+| 13.6 | **C# integration harness implemented in `selftest_csharp.py`**, compiling actual source in TEMP while keeping the application in one source file. | M | Adds regression coverage without a permanent project. |
 
 ## 14. Architecture and code health P1
 
@@ -207,15 +207,15 @@ The C# studio is an additional edition, not a replacement for the Python studio.
 
 | # | Item | Effort | Why |
 |---|---|---:|---|
-| C1 | CSV and JSON import with preview, column mapping, type overrides and explicit NULL handling. | L | Restores the most common ingest workflow. |
-| C2 | Full-table streaming export to CSV, JSON, Markdown and SQL rather than visible-page export only. | M | Prevents accidental partial exports. |
-| C3 | Open and save `.sql` files plus multiple query tabs. | M | Brings the SQL workspace to daily-use parity. |
+| C1 | New-table CSV/JSON import with preview and atomic rollback implemented. Mapping into existing tables and type overrides remain planned. | L | Supports ingest while preserving original values. |
+| C2 | Full filtered streaming CSV/JSON/SQL INSERT export implemented. Markdown export remains planned. | M | Prevents accidental partial exports. |
+| C3 | Open/save SQL files, independent query tabs, find and unsaved-text prompts implemented. | M | Supports everyday SQL work. |
 | C4 | Visual table and index creation, common rename/add/drop operations and guarded destructive confirmations. | L | Avoids requiring raw SQL for ordinary schema work. |
-| C5 | Online backup, SQL dump import/export and project save/restore. | L | Supports recovery and repeatable workspaces. |
+| C5 | Online backup with verification implemented. Schema dumps and project save/restore remain planned. | L | Supports database recovery. |
 | C6 | Cross-table search, column profiling and basic charts. | L | Restores exploration tools. |
-| C7 | Recent files, reopen-last and per-database grid preferences. | M | Improves repeated use. |
+| C7 | Recent files and saved theme implemented; reopen-last and per-database grid preferences remain planned. | M | Improves repeated use. |
 | C8 | Windows UI automation tests for launch, open, browse, edit, rollback, SQL cancellation and read-only mode. | L | Verifies the native interface end to end. |
-| C9 | Screenshot set and a short Windows demonstration recording. | M | Documents the additional edition accurately. |
+| C9 | Native light/dark and minimum-size screenshots implemented. Demonstration recording remains planned. | M | Documents the native edition accurately. |
 
 ## Suggested sequencing
 

@@ -12,11 +12,11 @@ import unittest
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).parent))
 
-from sqlite_viewer import (bind_arguments, coerce_parameter, describe_constraint_error, file_is_writable,
-                           find_parameters, format_sql, infer_column_types, json_records_to_table,
-                           like_pattern, markdown_row, markdown_table, profile_column, quote_identifier,
-                           run_script_atomically, search_database, split_sql, sql_insert_statements,
-                           sql_literal)
+from studio import (bind_arguments, coerce_parameter, describe_constraint_error, file_is_writable,
+                    find_parameters, format_sql, infer_column_types, json_records_to_table,
+                    like_pattern, markdown_row, markdown_table, profile_column, quote_identifier,
+                    run_script_atomically, search_database, split_sql, sql_insert_statements,
+                    sql_literal)
 
 
 class WorkbenchCoreTests(unittest.TestCase):
@@ -215,7 +215,7 @@ class WorkbenchCoreTests(unittest.TestCase):
         try:
             self.assertTrue(file_is_writable(Path(path)))
             os.chmod(path, 0o444)
-            if os.geteuid() != 0:
+            if hasattr(os, "geteuid") and os.geteuid() != 0:
                 self.assertFalse(file_is_writable(Path(path)))
         finally:
             os.chmod(path, 0o644)
